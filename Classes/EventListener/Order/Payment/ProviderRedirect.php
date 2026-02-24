@@ -268,7 +268,7 @@ class ProviderRedirect
         $this->paymentQuery['amount_1'] = $this->paymentQuery['mc_gross'];
     }
 
-    protected function getUrl(string $type, string $hash): string
+    protected function getUrl(string $action, string $hash): string
     {
         $pid = (int)$this->cartConf['settings']['cart']['pid'];
 
@@ -280,9 +280,9 @@ class ProviderRedirect
         $uri = $router->generateUri(
             $pid,
             [
-                '_type' => (int)$this->cartPaypalConf['redirectTypeNum'],
+                'type' => (int)$this->cartPaypalConf['redirectTypeNum'],
                 'tx_cartpaypal_cart' => [
-                    'action' => $type,
+                    'action' => $action,
                     'hash' => $hash,
                     'order' => $this->orderItem->getUid(),
                 ],

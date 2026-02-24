@@ -16,9 +16,10 @@ use Extcode\Cart\Service\SessionHandler;
 use Extcode\CartPaypal\Event\Order\CancelEvent;
 use Extcode\CartPaypal\Event\Order\NotifyEvent;
 use Extcode\CartPaypal\Event\Order\SuccessEvent;
+use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
 use TYPO3\CMS\Core\Log\LogManagerInterface;
-use TYPO3\CMS\Core\Messaging\AbstractMessage;
+use TYPO3\CMS\Core\Type\ContextualFeedbackSeverity;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Configuration\ConfigurationManagerInterface;
 use TYPO3\CMS\Extbase\Mvc\Controller\ActionController;
@@ -100,7 +101,7 @@ class PaymentController extends ActionController
             );
     }
 
-    public function successAction(): void
+    public function successAction(): ResponseInterface
     {
         if ($this->request->hasArgument('hash') && !empty($this->request->getArgument('hash'))) {
             $this->loadCartByHash($this->request->getArgument('hash'));
@@ -111,7 +112,7 @@ class PaymentController extends ActionController
                 $successEvent = new SuccessEvent($this->cart->getCart(), $orderItem, $this->cartConf);
                 $this->eventDispatcher->dispatch($successEvent);
 
-                $this->redirect('show', 'Cart\Order', 'Cart', ['orderItem' => $orderItem]);
+                return $this->redirect('show', 'Cart\Order', 'Cart', ['orderItem' => $orderItem]);
             } else {
                 $this->addFlashMessage(
                     LocalizationUtility::translate(
@@ -119,7 +120,7 @@ class PaymentController extends ActionController
                         'cart_paypal'
                     ),
                     '',
-                    AbstractMessage::ERROR
+                    ContextualFeedbackSeverity::ERROR
                 );
             }
         } else {
@@ -129,12 +130,14 @@ class PaymentController extends ActionController
                     'cart_paypal'
                 ),
                 '',
-                AbstractMessage::ERROR
+                ContextualFeedbackSeverity::ERROR
             );
         }
+
+        return $this->htmlResponse();
     }
 
-    public function cancelAction(): void
+    public function cancelAction(): ResponseInterface
     {
         if ($this->request->hasArgument('hash') && !empty($this->request->getArgument('hash'))) {
             $this->loadCartByHash($this->request->getArgument('hash'), 'FHash');
@@ -160,7 +163,7 @@ class PaymentController extends ActionController
                 $cancelEvent = new CancelEvent($this->cart->getCart(), $orderItem, $this->cartConf);
                 $this->eventDispatcher->dispatch($cancelEvent);
 
-                $this->redirect('show', 'Cart\Cart', 'Cart');
+                return $this->redirect('show', 'Cart\Cart', 'Cart');
             } else {
                 $this->addFlashMessage(
                     LocalizationUtility::translate(
@@ -168,7 +171,7 @@ class PaymentController extends ActionController
                         'cart_paypal'
                     ),
                     '',
-                    AbstractMessage::ERROR
+                    ContextualFeedbackSeverity::ERROR
                 );
             }
         } else {
@@ -178,27 +181,24 @@ class PaymentController extends ActionController
                     'cart_paypal'
                 ),
                 '',
-                AbstractMessage::ERROR
+                ContextualFeedbackSeverity::ERROR
             );
         }
+
+        return $this->htmlResponse();
     }
 
-    public function notifyAction()
+    public function notifyAction(): ResponseInterface
     {
         if ($this->request->getMethod() !== 'POST') {
-            // exit with Status Code in TYPO3 v10.4
-            if (isset($this->response)) {
-                $this->response->setStatus(405);
-                exit();
-            }
             return $this->htmlResponse()->withStatus(405, 'Method not allowed.');
         }
 
-        $postData = GeneralUtility::_POST();
+        $postData = $this->request->getParsedBody();
 
         $curlRequest = $this->getCurlRequestFromPostData($postData);
 
-        if ($this->cartPaypalConf['debug']) {
+        if (isset($this->cartPaypalConf['debug']) && $this->cartPaypalConf['debug']) {
             $this->logger->debug(
                 'Log Data',
                 [
@@ -210,24 +210,14 @@ class PaymentController extends ActionController
 
         $this->execCurlRequest($curlRequest);
 
-        $cartSHash = $postData['custom'];
+        $cartSHash = $postData['custom'] ?? '';
         if (empty($cartSHash)) {
-            // exit with Status Code in TYPO3 v10.4
-            if (isset($this->response)) {
-                $this->response->setStatus(403);
-                exit();
-            }
             return $this->htmlResponse()->withStatus(403, 'Not allowed.');
         }
 
-        $this->loadCartByHash($this->request->getArgument('hash'));
+        $this->loadCartByHash($cartSHash);
 
         if ($this->cart === null) {
-            // exit with Status Code in TYPO3 v10.4
-            if (isset($this->response)) {
-                $this->response->setStatus(404);
-                exit();
-            }
             return $this->htmlResponse()->withStatus(404, 'Page / Cart not found.');
         }
 
@@ -243,11 +233,6 @@ class PaymentController extends ActionController
             $this->eventDispatcher->dispatch($notifyEvent);
         }
 
-        // exit with Status Code in TYPO3 v10.4
-        if (isset($this->response)) {
-            $this->response->setStatus(200);
-            exit();
-        }
         return $this->htmlResponse()->withStatus(200);
     }
 
@@ -256,7 +241,8 @@ class PaymentController extends ActionController
         $cart = $this->cart->getCart();
         $cart->resetOrderNumber();
         $cart->resetInvoiceNumber();
-        $this->sessionHandler->write($cart, $this->cartConf['settings']['cart']['pid']);
+        $pid = $this->cartConf['settings']['cart']['pid'] ?? 0;
+        $this->sessionHandler->write($cart, $pid);
     }
 
     protected function getCurlRequestFromPostData(array $parsePostData): string
@@ -287,7 +273,7 @@ class PaymentController extends ActionController
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
         curl_setopt($ch, CURLOPT_FORBID_REUSE, 1);
 
-        if (is_array($this->cartPaypalConf) && intval($this->cartPaypalConf['curl_timeout'])) {
+        if (is_array($this->cartPaypalConf) && isset($this->cartPaypalConf['curl_timeout']) && intval($this->cartPaypalConf['curl_timeout'])) {
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, intval($this->cartPaypalConf['curl_timeout']));
         } else {
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 300);
@@ -312,7 +298,7 @@ class PaymentController extends ActionController
             exit;
         }
 
-        if ($this->cartPaypalConf['debug']) {
+        if (isset($this->cartPaypalConf['debug']) && $this->cartPaypalConf['debug']) {
             $this->logger->debug(
                 'paypal-payment-api',
                 [
@@ -332,7 +318,7 @@ class PaymentController extends ActionController
 
     protected function getPaypalUrl(): string
     {
-        if ($this->cartPaypalConf['sandbox']) {
+        if (isset($this->cartPaypalConf['sandbox']) && $this->cartPaypalConf['sandbox']) {
             return self::PAYPAL_API_SANDBOX;
         }
 
@@ -344,7 +330,8 @@ class PaymentController extends ActionController
         $querySettings = GeneralUtility::makeInstance(
             Typo3QuerySettings::class
         );
-        $querySettings->setStoragePageIds([$this->cartConf['settings']['order']['pid']]);
+        $orderPid = $this->cartConf['settings']['order']['pid'] ?? 0;
+        $querySettings->setStoragePageIds([$orderPid]);
         $this->cartRepository->setDefaultQuerySettings($querySettings);
 
         $findOneByMethod = 'findOneBy' . $type;
