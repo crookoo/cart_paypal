@@ -241,8 +241,8 @@ class PaymentController extends ActionController
         $cart = $this->cart->getCart();
         $cart->resetOrderNumber();
         $cart->resetInvoiceNumber();
-        $pid = $this->cartConf['settings']['cart']['pid'] ?? 0;
-        $this->sessionHandler->write($cart, $pid);
+        $pid = (string)($this->cartConf['settings']['cart']['pid'] ?? '0');
+        $this->sessionHandler->writeCart($pid, $cart);
     }
 
     protected function getCurlRequestFromPostData(array $parsePostData): string
