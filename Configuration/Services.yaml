@@ -19,7 +19,7 @@ services:
   Extcode\CartPaypal\EventListener\Order\Payment\ClearCart:
     arguments:
       $cartUtility: '@Extcode\Cart\Utility\CartUtility'
-      $parserUtility: '@Extcode\Cart\Utility\ParserUtility'
+      $paymentMethodsService: '@Extcode\Cart\Service\PaymentMethodsServiceInterface'
       $sessionHandler: '@Extcode\Cart\Service\SessionHandler'
     tags:
       - name: event.listener

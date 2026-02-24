@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace Extcode\CartPaypal\EventListener\Order\Payment;
 
 /*
@@ -21,6 +23,8 @@ use TYPO3\CMS\Extbase\Configuration\ConfigurationManager;
 use TYPO3\CMS\Extbase\Mvc\Web\Routing\UriBuilder;
 use TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager;
 
+use TYPO3\CMS\Core\Site\SiteFinder;
+
 class ProviderRedirect
 {
     const PAYPAL_API_SANDBOX = 'https://www.sandbox.paypal.com/cgi-bin/webscr?';
@@ -40,11 +44,6 @@ class ProviderRedirect
      * @var TypoScriptService
      */
     protected $typoScriptService;
-
-    /**
-     * @var UriBuilder
-     */
-    protected $uriBuilder;
 
     /**
      * @var CartRepository
@@ -90,13 +89,11 @@ class ProviderRedirect
         ConfigurationManager $configurationManager,
         PersistenceManager $persistenceManager,
         TypoScriptService $typoScriptService,
-        UriBuilder $uriBuilder,
         CartRepository $cartRepository
     ) {
         $this->configurationManager = $configurationManager;
         $this->persistenceManager = $persistenceManager;
         $this->typoScriptService = $typoScriptService;
-        $this->uriBuilder = $uriBuilder;
         $this->cartRepository = $cartRepository;
 
         $this->cartConf = $this->configurationManager->getConfiguration(
@@ -271,24 +268,27 @@ class ProviderRedirect
         $this->paymentQuery['amount_1'] = $this->paymentQuery['mc_gross'];
     }
 
-    protected function getUrl(string $action, string $hash): string
+    protected function getUrl(string $type, string $hash): string
     {
         $pid = (int)$this->cartConf['settings']['cart']['pid'];
 
-        $arguments = [
-            'tx_cartpaypal_cart' => [
-                'controller' => 'Order\Payment',
-                'order' => $this->orderItem->getUid(),
-                'action' => $action,
-                'hash' => $hash
-            ]
-        ];
+        $siteFinder = GeneralUtility::makeInstance(SiteFinder::class);
+        $site = $siteFinder->getSiteByPageId($pid);
 
-        return $this->uriBuilder->reset()
-            ->setTargetPageUid($pid)
-            ->setTargetPageType((int)$this->cartPaypalConf['redirectTypeNum'])
-            ->setCreateAbsoluteUri(true)
-            ->setArguments($arguments)
-            ->build();
+        $router = $site->getRouter();
+
+        $uri = $router->generateUri(
+            $pid,
+            [
+                '_type' => (int)$this->cartPaypalConf['redirectTypeNum'],
+                'tx_cartpaypal_cart' => [
+                    'action' => $type,
+                    'hash' => $hash,
+                    'order' => $this->orderItem->getUid(),
+                ],
+            ]
+        );
+
+        return (string)$uri;
     }
 }

@@ -12,16 +12,16 @@ namespace Extcode\CartPaypal\EventListener\Order\Payment;
 use Extcode\Cart\Event\Order\EventInterface;
 use Extcode\Cart\Service\SessionHandler;
 use Extcode\Cart\Utility\CartUtility;
-use Extcode\Cart\Utility\ParserUtility;
+use Extcode\Cart\Service\PaymentMethodsServiceInterface;
 
 class ClearCart extends \Extcode\Cart\EventListener\Order\Finish\ClearCart
 {
     public function __construct(
         CartUtility $cartUtility,
-        ParserUtility $parserUtility,
+        PaymentMethodsServiceInterface $paymentMethodsService,
         SessionHandler $sessionHandler
     ) {
-        parent::__construct($cartUtility, $parserUtility, $sessionHandler);
+        parent::__construct($cartUtility, $paymentMethodsService, $sessionHandler);
     }
 
     public function __invoke(EventInterface $event): void
